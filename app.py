@@ -19,10 +19,11 @@ def load_bitcoin_data(filename='BTC.json'):
 
 # Calculate technical indicators and signals
 def calculate_indicators(df, short_window, long_window):
-    df['SMA_Short'] = df['Price'].rolling(window=short_window).mean()
-    df['SMA_Long'] = df['Price'].rolling(window=long_window).mean()
-    df['Buy_Signal'] = (df['SMA_Short'] > df['SMA_Long']) & (df['SMA_Short'].shift(1) <= df['SMA_Long'].shift(1))
-    df['Sell_Signal'] = (df['SMA_Short'] < df['SMA_Long']) & (df['SMA_Short'].shift(1) >= df['SMA_Long'].shift(1))
+    df = df.copy()  # Make a copy of the DataFrame to avoid modifying the original
+    df.loc[:, 'SMA_Short'] = df['Price'].rolling(window=short_window).mean()
+    df.loc[:, 'SMA_Long'] = df['Price'].rolling(window=long_window).mean()
+    df.loc[:, 'Buy_Signal'] = (df['SMA_Short'] > df['SMA_Long']) & (df['SMA_Short'].shift(1) <= df['SMA_Long'].shift(1))
+    df.loc[:, 'Sell_Signal'] = (df['SMA_Short'] < df['SMA_Long']) & (df['SMA_Short'].shift(1) >= df['SMA_Long'].shift(1))
     return df
 
 # Backtesting function
@@ -44,74 +45,51 @@ def generate_random_dates(num_dates=100):
     return pd.DataFrame({'Random Dates': random_dates, 'M': random_m_values, 'N': random_n_values})
 
 # Initialize the Dash app
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 # Load and process data
 df = load_bitcoin_data()
 
 # Define the layout of the app
 app.layout = html.Div([
-    dcc.Tabs(id='tabs', value='tab-2', children=[
-        dcc.Tab(label='BTC', value='tab-1'),
-        dcc.Tab(label='BTC SMA Optimization', value='tab-2'),
-    ]),
-    html.Div(id='tabs-content')
+    html.H1(children='Bitcoin Price History and Backtesting'),
+
+    dcc.Graph(id='bitcoin-price-graph'),
+    dcc.Graph(id='sma-graph'),
+
+    dcc.RangeSlider(
+        id='date-range-slider',
+        min=0,
+        max=len(df) - 1,
+        value=[0, len(df) - 1],
+        marks={i: date.strftime('%Y-%m-%d') for i, date in enumerate(df['Date'][::len(df)//10])},
+        step=1
+    ),
+
+    html.Label('Short SMA period'),
+    html.Div(id='sma-value', style={'margin-top': 10}),
+    dcc.Slider(
+        id='sma-slider',
+        min=0,
+        max=100,
+        value=20,  # Default short SMA period
+        marks={i: str(i) for i in range(0, 101, 10)},
+        step=1
+    ),
+
+    html.Label('Long SMA period'),
+    html.Div(id='second-slider-value', style={'margin-top': 10}),
+    dcc.Slider(
+        id='second-slider',
+        min=10,
+        max=100,
+        value=50,  # Default long SMA period
+        marks={i: str(i) for i in range(10, 101, 10)},
+        step=1
+    ),
+
+    html.Div(id='backtest-result', style={'margin-top': 20})
 ])
-
-# Callback to render the content of the selected tab
-@app.callback(Output('tabs-content', 'children'),
-              [Input('tabs', 'value')])
-def render_content(tab):
-    if tab == 'tab-1':
-        return html.Div([
-            html.H1(children='Bitcoin Price History and Backtesting'),
-
-            dcc.Graph(id='bitcoin-price-graph'),
-            dcc.Graph(id='sma-graph'),
-
-            dcc.RangeSlider(
-                id='date-range-slider',
-                min=0,
-                max=len(df) - 1,
-                value=[0, len(df) - 1],
-                marks={i: date.strftime('%Y-%m-%d') for i, date in enumerate(df['Date'][::len(df)//10])},
-                step=1
-            ),
-
-            html.Label('Short SMA period'),
-            html.Div(id='sma-value', style={'margin-top': 10}),
-            dcc.Slider(
-                id='sma-slider',
-                min=0,
-                max=100,
-                value=20,  # Default short SMA period
-                marks={i: str(i) for i in range(0, 101, 10)},
-                step=1
-            ),
-
-            html.Label('Long SMA period'),
-            html.Div(id='second-slider-value', style={'margin-top': 10}),
-            dcc.Slider(
-                id='second-slider',
-                min=10,
-                max=100,
-                value=50,  # Default long SMA period
-                marks={i: str(i) for i in range(10, 101, 10)},
-                step=1
-            ),
-
-            html.Div(id='backtest-result', style={'margin-top': 20})
-        ])
-    elif tab == 'tab-2':
-        random_dates_df = generate_random_dates()
-        return html.Div([
-            html.H1(children='BTC SMA Optimization'),
-            dash_table.DataTable(
-                data=random_dates_df.to_dict('records'),
-                columns=[{'name': i, 'id': i} for i in random_dates_df.columns],
-                page_size=10
-            )
-        ])
 
 # Update the graphs and display the SMA value
 @app.callback(
@@ -121,15 +99,11 @@ def render_content(tab):
      Output('second-slider', 'min'),
      Output('second-slider-value', 'children'),
      Output('backtest-result', 'children')],
-    [Input('tabs', 'value'),
-     Input('date-range-slider', 'value'),
+    [Input('date-range-slider', 'value'),
      Input('sma-slider', 'value'),
      Input('second-slider', 'value')]
 )
-def update_graphs(tab, date_range, m, second_value):
-    if tab != 'tab-1':
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
+def update_graphs(date_range, m, second_value):
     m = max(m, 1)  # Ensure m is at least 1
     filtered_df = df.iloc[date_range[0]:date_range[1]+1]
     filtered_df = calculate_indicators(filtered_df, m, second_value)
