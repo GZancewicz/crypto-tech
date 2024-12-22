@@ -2,22 +2,23 @@ import dash
 from dash import html, dcc
 import plotly.graph_objs as go
 import pandas as pd
-import requests
+import json
 
-# Fetch Bitcoin price data
-def fetch_bitcoin_data():
-    url = 'https://api.coindesk.com/v1/bpi/historical/close.json?start=2020-01-01&end=2023-01-01'
-    response = requests.get(url)
-    data = response.json()
-    df = pd.DataFrame(list(data['bpi'].items()), columns=['Date', 'Price'])
+# Load Bitcoin price data from BTC.json
+def load_bitcoin_data(filename='BTC.json'):
+    with open(filename, 'r') as f:
+        data = json.load(f)
+    # Extract date and close price
+    records = [(date, values['close']) for date, values in data['bpi'].items()]
+    df = pd.DataFrame(records, columns=['Date', 'Price'])
     df['Date'] = pd.to_datetime(df['Date'])
     return df
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
 
-# Fetch data
-df = fetch_bitcoin_data()
+# Load data
+df = load_bitcoin_data()
 
 # Define the layout of the app
 app.layout = html.Div(children=[
