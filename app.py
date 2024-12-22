@@ -25,10 +25,6 @@ def calculate_indicators(df):
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     
-    # Generate buy/sell signals
-    df['Buy_Signal'] = ((df['SMA_10'] > df['SMA_50']) & (df['SMA_10'].shift(1) <= df['SMA_50'].shift(1))) | (df['RSI'] < 30)
-    df['Sell_Signal'] = ((df['SMA_10'] < df['SMA_50']) & (df['SMA_10'].shift(1) >= df['SMA_50'].shift(1))) | (df['RSI'] > 70)
-    
     return df
 
 # Initialize the Dash app
@@ -91,8 +87,15 @@ app.layout = html.Div(children=[
 def update_graphs(date_range, m, second_value):
     m = max(m, 1)  # Ensure m is at least 1
     filtered_df = df.iloc[date_range[0]:date_range[1]+1]
-    filtered_df['SMA_M'] = filtered_df['Price'].rolling(window=m).mean()
+    filtered_df['SMA_Short'] = filtered_df['Price'].rolling(window=m).mean()
     filtered_df['SMA_Long'] = filtered_df['Price'].rolling(window=second_value).mean()
+    
+    # Generate buy/sell signals
+    filtered_df['Buy_Signal'] = (filtered_df['SMA_Short'] > filtered_df['SMA_Long']) & (filtered_df['SMA_Short'].shift(1) <= filtered_df['SMA_Long'].shift(1))
+    filtered_df['Sell_Signal'] = (filtered_df['SMA_Short'] < filtered_df['SMA_Long']) & (filtered_df['SMA_Short'].shift(1) >= filtered_df['SMA_Long'].shift(1))
+    
+    buy_signals = filtered_df[filtered_df['Buy_Signal']]
+    sell_signals = filtered_df[filtered_df['Sell_Signal']]
     
     price_figure = {
         'data': [
@@ -121,7 +124,7 @@ def update_graphs(date_range, m, second_value):
             ),
             go.Scatter(
                 x=filtered_df['Date'],
-                y=filtered_df['SMA_M'],
+                y=filtered_df['SMA_Short'],
                 mode='lines',
                 name=f'Short SMA {m}'
             ),
@@ -130,6 +133,20 @@ def update_graphs(date_range, m, second_value):
                 y=filtered_df['SMA_Long'],
                 mode='lines',
                 name=f'Long SMA {second_value}'
+            ),
+            go.Scatter(
+                x=buy_signals['Date'],
+                y=buy_signals['Price'],
+                mode='markers',
+                marker=dict(color='green', size=10, symbol='triangle-up'),
+                name='Buy Signal'
+            ),
+            go.Scatter(
+                x=sell_signals['Date'],
+                y=sell_signals['Price'],
+                mode='markers',
+                marker=dict(color='red', size=10, symbol='triangle-down'),
+                name='Sell Signal'
             )
         ],
         'layout': go.Layout(
